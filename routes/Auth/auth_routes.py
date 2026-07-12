@@ -9,5 +9,11 @@ from Petpro_backend.sqldatabase import get_db          # your DB session depende
 from Petpro_backend.models.user_model import User
 from Petpro_backend.routes.Auth.auth_schema import RegisterRequest, LoginRequest, RefreshRequest, TokenResponse, UserOut
 from Petpro_backend.env import auth
-import dotenv
+from dotenv import load_dotenv
+from pathlib import Path
+import os
 
+env_path = Path(__file__).parent / "env" / "auth.env"
+load_dotenv(env_path)
+
+SECRET_KEY = os.getenv("SECRET_KEY")
