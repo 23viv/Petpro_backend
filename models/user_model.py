@@ -16,3 +16,5 @@ class User(Base):
     current_refresh_token = Column(String(512), nullable=True)
 
     created_at = Column(DateTime, server_default=func.now())
+
+    profile_photo_url = Column(String(600),nullable=True)

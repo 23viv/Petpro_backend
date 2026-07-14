@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 import os
 
-env_path = Path(__file__).parent / "env" / "auth.env"
+env_path = Path(__file__).parent / "env" / ".env"
 load_dotenv(env_path)
 
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -88,7 +88,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
-router.post("/refresh", response_model=TokenResponse)
+@router.post("/refresh", response_model=TokenResponse)
 def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
     try:
         claims = jwt.decode(payload.refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
