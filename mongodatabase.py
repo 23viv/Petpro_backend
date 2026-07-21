@@ -18,3 +18,8 @@ _db     = _client[MONGO_DB_NAME]
 def get_messages_collection():
     """Return the 'messages' collection from MongoDB."""
     return _db["messages"]
+
+
+def get_diet_collection():
+    """Return the 'diet_plans' collection from MongoDB."""
+    return _db["diet_plans"]

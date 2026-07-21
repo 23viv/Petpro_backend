@@ -1,12 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException
 from datetime import datetime, timezone
 from bson import ObjectId
+from sqlalchemy.orm import Session
 
 from routes.Auth.auth_routes import get_current_user
 from routes.Message.Message_schema import ChatRequest, ChatTurn, ChatResponse
 from mongodatabase import get_messages_collection
 from models.user_model import User
-from Agent.vet_agent import run_vet_agent
+from models.pet_model import Pet
+from sqldatabase import get_db
+from AI.vet_agent import run_vet_agent
 
 router = APIRouter(prefix="/messages", tags=["Vet Chat"])
 
@@ -21,12 +24,27 @@ def _to_turn(doc: dict) -> ChatTurn:
         timestamp=doc["timestamp"],
     )
 
-def _load_history(user_id: int, collection) -> list[dict]:
-    """Return all past turns as plain dicts for the agent."""
+def _load_history(user_id: int, collection) -> list:
+    """Return all past turns as plain dicts, ordered oldest-first."""
     return [
         {"role": d["role"], "content": d["content"]}
         for d in collection.find({"user_id": user_id}).sort("timestamp", 1)
     ]
+
+
+def _get_user_context(user: User, db: Session) -> dict:
+    """
+    Build the context dict passed to the vet agent so Dr. Paws knows
+    the owner's name and their primary pet's details.
+    Falls back gracefully if the user has no registered pets.
+    """
+    pet = db.query(Pet).filter(Pet.owner_id == user.id).first()
+    return {
+        "owner_name": user.full_name or "there",
+        "pet_name":   pet.name      if pet else None,
+        "pet_type":   pet.pet_type  if pet else None,
+        "breed":      pet.breed     if pet else None,
+    }
 
 
 # ─── POST /messages/chat — send a message, get AI vet reply ──────────────────
@@ -35,10 +53,13 @@ def _load_history(user_id: int, collection) -> list[dict]:
 def chat(
     payload: ChatRequest,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
     Send a message to Dr. Paws (the AI vet).
-    The full conversation history is automatically included for context.
+    Only the last 4 history turns are sent to the model (2 user + 2 AI),
+    keeping token usage low while preserving short-term memory.
+    The agent is also given the owner's name and their pet's name/breed.
     """
     collection = get_messages_collection()
 
@@ -51,19 +72,24 @@ def chat(
     }
     user_doc["_id"] = collection.insert_one(user_doc).inserted_id
 
-    # 2. Load history BEFORE this turn (so the agent doesn't see the just-saved message)
-    history = _load_history(current_user.id, collection)[:-1]
+    # 2. Load history BEFORE this turn, then slice to the last 4 turns
+    full_history = _load_history(current_user.id, collection)[:-1]
+    recent_history = full_history[-4:]   # last 4 turns = 2 user + 2 AI
 
-    # 3. Run the vet agent
+    # 3. Build owner + pet context for Dr. Paws
+    user_context = _get_user_context(current_user, db)
+
+    # 4. Run the vet agent
     try:
         ai_text = run_vet_agent(
             user_message=payload.content,
-            conversation_history=history,
+            conversation_history=recent_history,
+            user_context=user_context,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Vet agent error: {str(e)}")
 
-    # 4. Save the agent's reply
+    # 5. Save the agent's reply
     ai_doc = {
         "user_id":   current_user.id,
         "role":      "assistant",

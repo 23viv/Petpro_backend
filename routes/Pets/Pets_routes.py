@@ -5,7 +5,7 @@ from sqldatabase import get_db
 from models.user_model import User
 from models.pet_model import Pet
 from routes.Auth.auth_routes import get_current_user
-from routes.Pet.pet_schema import CreatePetRequest, PetOut
+from routes.Pets.Pets_schema import CreatePetRequest, PetOut
 
 router = APIRouter(prefix="/pets", tags=["pets"])
 
